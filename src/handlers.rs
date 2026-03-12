@@ -64,13 +64,13 @@ pub async fn login(
     Json(req): Json<LoginRequest>,
 ) -> Result<Json<LoginResponse>, AppError> {
     let store = state.store.read().await;
-    let user_id = store
+    let user_id = *store
         .users_by_email
         .get(&req.email)
         .ok_or(AppError::InvalidCredentials)?;
     let user = store
         .users_by_id
-        .get(user_id)
+        .get(&user_id)
         .ok_or(AppError::InvalidCredentials)?;
     if !state.verify_password(&user.password_hash, &req.password) {
         return Err(AppError::InvalidCredentials);
@@ -78,7 +78,7 @@ pub async fn login(
     drop(store);
 
     Ok(Json(LoginResponse {
-        access_token: state.issue_token(*user_id)?,
+        access_token: state.issue_token(user_id)?,
     }))
 }
 

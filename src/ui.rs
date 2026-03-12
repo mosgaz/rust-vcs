@@ -45,5 +45,5 @@ fn LandingPage() -> impl IntoView {
 }
 
 pub fn render_landing_page() -> String {
-    leptos::ssr::render_to_string(|| view! { <LandingPage/> })
+    leptos::ssr::render_to_string(|| view! { <LandingPage/> }).to_string()
 }
