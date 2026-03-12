@@ -1,4 +1,4 @@
-use leptos::prelude::*;
+use leptos::{component, view, IntoView};
 
 #[component]
 fn LandingPage() -> impl IntoView {
