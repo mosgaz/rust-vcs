@@ -46,6 +46,14 @@ pub struct DirectMessage {
     pub sent_at: DateTime<Utc>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SignalEvent {
+    pub id: Uuid,
+    pub room_slug: String,
+    pub payload: String,
+    pub sent_at: DateTime<Utc>,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RegisterEmployeeRequest {
     pub email: String,
@@ -89,6 +97,7 @@ pub struct JoinByLinkRequest {
 pub struct JoinByLinkResponse {
     pub room_slug: String,
     pub ws_url: String,
+    pub signal_ws_url: String,
 }
 
 #[derive(Debug, Deserialize)]

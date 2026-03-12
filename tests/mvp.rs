@@ -27,6 +27,21 @@ async fn health_works_with_i18n() {
 }
 
 #[tokio::test]
+async fn leptos_tailwind_ui_page_is_served() {
+    let app = build_router(AppState::bootstrap("secret"));
+    let response = app
+        .oneshot(Request::builder().uri("/").body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let html = String::from_utf8(body.to_vec()).unwrap();
+    assert!(html.contains("Leptos + Tailwind"));
+    assert!(html.contains("cdn.tailwindcss.com"));
+}
+
+#[tokio::test]
 async fn employee_can_register_login_and_create_meeting() {
     let app = build_router(AppState::bootstrap("secret"));
 

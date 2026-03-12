@@ -1,5 +1,5 @@
 use crate::errors::AppError;
-use crate::models::{ChatMessage, DirectMessage, Meeting, User};
+use crate::models::{ChatMessage, DirectMessage, Meeting, SignalEvent, User};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::Utc;
@@ -22,8 +22,10 @@ pub struct Store {
     pub users_by_email: HashMap<String, Uuid>,
     pub meetings_by_slug: HashMap<String, Meeting>,
     pub room_channels: HashMap<String, broadcast::Sender<String>>,
+    pub signal_channels: HashMap<String, broadcast::Sender<String>>,
     pub dms: Vec<DirectMessage>,
     pub room_messages: Vec<ChatMessage>,
+    pub signal_events: Vec<SignalEvent>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -40,8 +42,10 @@ impl AppState {
                 users_by_email: HashMap::new(),
                 meetings_by_slug: HashMap::new(),
                 room_channels: HashMap::new(),
+                signal_channels: HashMap::new(),
                 dms: vec![],
                 room_messages: vec![],
+                signal_events: vec![],
             })),
             jwt_secret: Arc::new(jwt_secret.to_string()),
         }
@@ -94,6 +98,16 @@ impl AppState {
 impl Store {
     pub fn ensure_room_channel(&mut self, slug: &str) -> broadcast::Sender<String> {
         self.room_channels
+            .entry(slug.to_string())
+            .or_insert_with(|| {
+                let (tx, _rx) = broadcast::channel(256);
+                tx
+            })
+            .clone()
+    }
+
+    pub fn ensure_signal_channel(&mut self, slug: &str) -> broadcast::Sender<String> {
+        self.signal_channels
             .entry(slug.to_string())
             .or_insert_with(|| {
                 let (tx, _rx) = broadcast::channel(256);

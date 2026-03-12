@@ -3,18 +3,23 @@ use crate::i18n;
 use crate::models::{
     ApiMessage, ChatMessage, CreateMeetingRequest, CreateMeetingResponse, DirectMessage,
     FileAttachment, JoinByLinkRequest, JoinByLinkResponse, LoginRequest, LoginResponse,
-    RegisterEmployeeRequest, RegisterEmployeeResponse, SendDirectMessageRequest,
+    RegisterEmployeeRequest, RegisterEmployeeResponse, SendDirectMessageRequest, SignalEvent,
 };
 use crate::state::AppState;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Path, State};
 use axum::http::{HeaderMap, StatusCode};
+use axum::response::Html;
 use axum::response::IntoResponse;
 use axum::Json;
 use chrono::Utc;
 use futures::{sink::SinkExt, stream::StreamExt};
 use serde::Deserialize;
 use uuid::Uuid;
+
+pub async fn ui_index() -> Html<String> {
+    Html(crate::ui::render_landing_page())
+}
 
 pub async fn health(headers: HeaderMap) -> Json<ApiMessage> {
     let lang = i18n::locale(&headers);
@@ -101,6 +106,7 @@ pub async fn create_meeting(
     let mut store = state.store.write().await;
     store.meetings_by_slug.insert(slug.clone(), meeting);
     store.ensure_room_channel(&slug);
+    store.ensure_signal_channel(&slug);
 
     Ok(Json(CreateMeetingResponse {
         meeting_id: id,
@@ -118,6 +124,7 @@ pub async fn join_by_link(
         return Err(AppError::MeetingNotFound);
     }
     store.ensure_room_channel(&slug);
+    store.ensure_signal_channel(&slug);
 
     let joined = ChatMessage {
         id: Uuid::new_v4(),
@@ -133,7 +140,65 @@ pub async fn join_by_link(
     Ok(Json(JoinByLinkResponse {
         room_slug: slug.clone(),
         ws_url: format!("/v1/meetings/{slug}/ws"),
+        signal_ws_url: format!("/v1/meetings/{slug}/signal/ws"),
     }))
+}
+
+pub async fn signal_ws(
+    ws: WebSocketUpgrade,
+    State(state): State<AppState>,
+    Path(slug): Path<String>,
+) -> Result<impl IntoResponse, AppError> {
+    {
+        let store = state.store.read().await;
+        if !store.meetings_by_slug.contains_key(&slug) {
+            return Err(AppError::MeetingNotFound);
+        }
+    }
+
+    Ok(ws.on_upgrade(move |socket| async move {
+        handle_signal_socket(state, slug, socket).await;
+    }))
+}
+
+async fn handle_signal_socket(state: AppState, slug: String, socket: WebSocket) {
+    let signal_tx = {
+        let mut store = state.store.write().await;
+        store.ensure_signal_channel(&slug)
+    };
+    let mut signal_rx = signal_tx.subscribe();
+
+    let (mut sender, mut receiver) = socket.split();
+
+    let send_task = tokio::spawn(async move {
+        while let Ok(message) = signal_rx.recv().await {
+            if sender.send(Message::Text(message.into())).await.is_err() {
+                break;
+            }
+        }
+    });
+
+    let receive_state = state.clone();
+    let receive_slug = slug.clone();
+    let receive_task = tokio::spawn(async move {
+        while let Some(Ok(msg)) = receiver.next().await {
+            if let Message::Text(text) = msg {
+                let event = SignalEvent {
+                    id: Uuid::new_v4(),
+                    room_slug: receive_slug.clone(),
+                    payload: text.to_string(),
+                    sent_at: Utc::now(),
+                };
+                let mut store = receive_state.store.write().await;
+                store.signal_events.push(event);
+                if let Some(channel) = store.signal_channels.get(&receive_slug) {
+                    let _ = channel.send(text.to_string());
+                }
+            }
+        }
+    });
+
+    let _ = tokio::join!(send_task, receive_task);
 }
 
 #[derive(Debug, Deserialize)]
@@ -171,7 +236,7 @@ async fn handle_room_socket(state: AppState, slug: String, socket: WebSocket) {
 
     let send_task = tokio::spawn(async move {
         while let Ok(message) = room_rx.recv().await {
-            if sender.send(Message::Text(message)).await.is_err() {
+            if sender.send(Message::Text(message.into())).await.is_err() {
                 break;
             }
         }
