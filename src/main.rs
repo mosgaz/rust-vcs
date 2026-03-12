@@ -1,6 +1,7 @@
 use rust_vcs::app::build_router;
 use rust_vcs::state::AppState;
 use rust_vcs::tls;
+use std::env;
 use std::net::SocketAddr;
 use tokio::net::TcpListener;
 use tracing::info;
@@ -15,7 +16,12 @@ async fn main() -> anyhow::Result<()> {
     let state = AppState::bootstrap("change-me-in-prod");
     let app = build_router(state);
 
-    let addr: SocketAddr = "0.0.0.0:8080".parse()?;
+    let port = env::var("RUST_VCS_PORT")
+        .or_else(|_| env::var("PORT"))
+        .ok()
+        .and_then(|raw| raw.parse::<u16>().ok())
+        .unwrap_or(8080);
+    let addr: SocketAddr = format!("0.0.0.0:{port}").parse()?;
     let listener = TcpListener::bind(addr).await?;
     info!("rust-vcs mvp listening on {}", addr);
 
