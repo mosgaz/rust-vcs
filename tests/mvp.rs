@@ -248,3 +248,28 @@ async fn stage2_messenger_webinar_and_recording_flow() {
     let desktop_payload: Value = serde_json::from_slice(&desktop_body).unwrap();
     assert_eq!(desktop_payload.as_array().unwrap().len(), 3);
 }
+
+#[tokio::test]
+async fn stage2_ui_pages_are_served() {
+    let app = build_router(AppState::bootstrap("secret"));
+
+    let routes = [
+        "/auth/login",
+        "/auth/register",
+        "/messenger",
+        "/meetings/demo-room",
+        "/meetings/demo-room/waiting-room",
+    ];
+
+    for route in routes {
+        let response = app
+            .clone()
+            .oneshot(Request::builder().uri(route).body(Body::empty()).unwrap())
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::OK, "route {route}");
+        let body = response.into_body().collect().await.unwrap().to_bytes();
+        let html = String::from_utf8(body.to_vec()).unwrap();
+        assert!(html.contains("cdn.tailwindcss.com"), "route {route}");
+    }
+}

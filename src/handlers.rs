@@ -32,6 +32,26 @@ pub async fn ui_index() -> Html<String> {
     Html(crate::ui::render_landing_page())
 }
 
+pub async fn ui_login() -> Html<String> {
+    Html(crate::ui::render_login_page())
+}
+
+pub async fn ui_register() -> Html<String> {
+    Html(crate::ui::render_register_page())
+}
+
+pub async fn ui_messenger() -> Html<String> {
+    Html(crate::ui::render_messenger_page())
+}
+
+pub async fn ui_meeting(Path(slug): Path<String>) -> Html<String> {
+    Html(crate::ui::render_meeting_page(&slug))
+}
+
+pub async fn ui_waiting_room(Path(slug): Path<String>) -> Html<String> {
+    Html(crate::ui::render_waiting_room_page(&slug))
+}
+
 pub async fn health(headers: HeaderMap) -> Json<ApiMessage> {
     let lang = i18n::locale(&headers);
     Json(ApiMessage {

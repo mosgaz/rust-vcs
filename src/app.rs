@@ -11,6 +11,14 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(handlers::ui_index))
         .route("/health", get(handlers::health))
+        .route("/auth/login", get(handlers::ui_login))
+        .route("/auth/register", get(handlers::ui_register))
+        .route("/messenger", get(handlers::ui_messenger))
+        .route("/meetings/:slug", get(handlers::ui_meeting))
+        .route(
+            "/meetings/:slug/waiting-room",
+            get(handlers::ui_waiting_room),
+        )
         .route("/v1/auth/register", post(handlers::register_employee))
         .route("/v1/auth/login", post(handlers::login))
         .route("/v1/meetings", post(handlers::create_meeting))
