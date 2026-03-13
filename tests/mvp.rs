@@ -273,3 +273,23 @@ async fn stage2_ui_pages_are_served() {
         assert!(html.contains("cdn.tailwindcss.com"), "route {route}");
     }
 }
+
+#[tokio::test]
+async fn system_status_reports_mediasoup_gap() {
+    let app = build_router(AppState::bootstrap("secret"));
+    let response = app
+        .oneshot(
+            Request::builder()
+                .uri("/v1/system/status")
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response.into_body().collect().await.unwrap().to_bytes();
+    let payload: Value = serde_json::from_slice(&body).unwrap();
+    assert_eq!(payload["stage"], "stage2");
+    assert_eq!(payload["mediasoup_sfu"], false);
+    assert_eq!(payload["recording_placeholder"], true);
+}

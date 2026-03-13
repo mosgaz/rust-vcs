@@ -197,3 +197,16 @@ pub struct StartRecordingResponse {
 pub struct ApiMessage {
     pub message: String,
 }
+
+#[derive(Debug, Serialize)]
+pub struct SystemStatusResponse {
+    pub stage: String,
+    pub auth: bool,
+    pub meetings: bool,
+    pub chat_ws: bool,
+    pub signaling_ws: bool,
+    pub messenger_threads: bool,
+    pub webinar_mode: bool,
+    pub recording_placeholder: bool,
+    pub mediasoup_sfu: bool,
+}

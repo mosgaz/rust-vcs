@@ -6,7 +6,7 @@ use crate::models::{
     JoinByLinkResponse, LoginRequest, LoginResponse, MeetingMode, MeetingSpeakersResponse,
     RecordingSession, RegisterEmployeeRequest, RegisterEmployeeResponse, SendDirectMessageRequest,
     SendThreadMessageRequest, SetSpeakerRequest, SignalEvent, StartRecordingResponse,
-    ThreadMessage,
+    SystemStatusResponse, ThreadMessage,
 };
 use crate::state::AppState;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -50,6 +50,20 @@ pub async fn ui_meeting(Path(slug): Path<String>) -> Html<String> {
 
 pub async fn ui_waiting_room(Path(slug): Path<String>) -> Html<String> {
     Html(crate::ui::render_waiting_room_page(&slug))
+}
+
+pub async fn system_status() -> Json<SystemStatusResponse> {
+    Json(SystemStatusResponse {
+        stage: "stage2".into(),
+        auth: true,
+        meetings: true,
+        chat_ws: true,
+        signaling_ws: true,
+        messenger_threads: true,
+        webinar_mode: true,
+        recording_placeholder: true,
+        mediasoup_sfu: false,
+    })
 }
 
 pub async fn health(headers: HeaderMap) -> Json<ApiMessage> {

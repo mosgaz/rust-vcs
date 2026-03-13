@@ -11,6 +11,7 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         .route("/", get(handlers::ui_index))
         .route("/health", get(handlers::health))
+        .route("/v1/system/status", get(handlers::system_status))
         .route("/auth/login", get(handlers::ui_login))
         .route("/auth/register", get(handlers::ui_register))
         .route("/messenger", get(handlers::ui_messenger))

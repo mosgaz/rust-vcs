@@ -86,6 +86,7 @@ PORT=18080 cargo run
 ## Основные API эндпоинты
 
 - `GET /health`
+- `GET /v1/system/status`
 - `POST /v1/auth/register`
 - `POST /v1/auth/login`
 - `POST /v1/meetings`
@@ -104,3 +105,21 @@ PORT=18080 cargo run
 ## Примечание по медиа/DTLS/SFU
 
 Сейчас реализован signaling и каркас серверных сценариев Этапа 2. Полноценный SFU-режим на Mediasoup, production-ready рекордер медиапотоков и постоянное хранилище (PostgreSQL/S3) остаются в следующих итерациях roadmap.
+
+
+## Быстрая локальная проверка
+
+1. Запустить сервис:
+
+```bash
+cargo run
+```
+
+2. Проверить доступность и статус реализации:
+
+```bash
+curl -s http://localhost:3242/health
+curl -s http://localhost:3242/v1/system/status
+```
+
+`/v1/system/status` явно показывает, что **mediasoup SFU пока не подключен** (`mediasoup_sfu=false`), а запись встреч сейчас является placeholder-реализацией.
