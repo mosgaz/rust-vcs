@@ -1,5 +1,9 @@
 use crate::errors::AppError;
-use crate::models::{ChatMessage, DirectMessage, Meeting, SignalEvent, User};
+use crate::mediasoup::MediaSoupClient;
+use crate::models::{
+    ChatMessage, ChatThread, DesktopAppStatus, DirectMessage, Meeting, RecordingSession,
+    SignalEvent, ThreadMessage, User,
+};
 use argon2::password_hash::{rand_core::OsRng, SaltString};
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use chrono::Utc;
@@ -13,6 +17,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub store: Arc<RwLock<Store>>,
+    pub mediasoup: MediaSoupClient,
     jwt_secret: Arc<String>,
 }
 
@@ -26,6 +31,10 @@ pub struct Store {
     pub dms: Vec<DirectMessage>,
     pub room_messages: Vec<ChatMessage>,
     pub signal_events: Vec<SignalEvent>,
+    pub threads_by_id: HashMap<Uuid, ChatThread>,
+    pub thread_messages: Vec<ThreadMessage>,
+    pub recordings: Vec<RecordingSession>,
+    pub desktop_statuses: Vec<DesktopAppStatus>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -46,7 +55,28 @@ impl AppState {
                 dms: vec![],
                 room_messages: vec![],
                 signal_events: vec![],
+                threads_by_id: HashMap::new(),
+                thread_messages: vec![],
+                recordings: vec![],
+                desktop_statuses: vec![
+                    DesktopAppStatus {
+                        target: "windows".into(),
+                        status: "planned".into(),
+                        runtime: "tauri".into(),
+                    },
+                    DesktopAppStatus {
+                        target: "macos".into(),
+                        status: "planned".into(),
+                        runtime: "tauri".into(),
+                    },
+                    DesktopAppStatus {
+                        target: "linux".into(),
+                        status: "planned".into(),
+                        runtime: "tauri".into(),
+                    },
+                ],
             })),
+            mediasoup: MediaSoupClient::from_env(),
             jwt_secret: Arc::new(jwt_secret.to_string()),
         }
     }

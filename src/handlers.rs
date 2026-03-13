@@ -1,9 +1,12 @@
 use crate::errors::AppError;
 use crate::i18n;
 use crate::models::{
-    ApiMessage, ChatMessage, CreateMeetingRequest, CreateMeetingResponse, DirectMessage,
-    FileAttachment, JoinByLinkRequest, JoinByLinkResponse, LoginRequest, LoginResponse,
-    RegisterEmployeeRequest, RegisterEmployeeResponse, SendDirectMessageRequest, SignalEvent,
+    ApiMessage, ChatMessage, ChatThread, CreateMeetingRequest, CreateMeetingResponse,
+    CreateThreadRequest, CreateThreadResponse, DirectMessage, FileAttachment, JoinByLinkRequest,
+    JoinByLinkResponse, LoginRequest, LoginResponse, MeetingMode, MeetingSpeakersResponse,
+    RecordingSession, RegisterEmployeeRequest, RegisterEmployeeResponse, SendDirectMessageRequest,
+    SendThreadMessageRequest, SetSpeakerRequest, SignalEvent, StartRecordingResponse,
+    SystemStatusResponse, ThreadMessage,
 };
 use crate::state::AppState;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
@@ -17,8 +20,53 @@ use futures::{sink::SinkExt, stream::StreamExt};
 use serde::Deserialize;
 use uuid::Uuid;
 
+fn bearer_user(headers: &HeaderMap, state: &AppState) -> Result<Uuid, AppError> {
+    let auth = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .ok_or(AppError::InvalidCredentials)?;
+    state.parse_token(auth)
+}
+
 pub async fn ui_index() -> Html<String> {
     Html(crate::ui::render_landing_page())
+}
+
+pub async fn ui_login() -> Html<String> {
+    Html(crate::ui::render_login_page())
+}
+
+pub async fn ui_register() -> Html<String> {
+    Html(crate::ui::render_register_page())
+}
+
+pub async fn ui_messenger() -> Html<String> {
+    Html(crate::ui::render_messenger_page())
+}
+
+pub async fn ui_meeting(Path(slug): Path<String>) -> Html<String> {
+    Html(crate::ui::render_meeting_page(&slug))
+}
+
+pub async fn ui_waiting_room(Path(slug): Path<String>) -> Html<String> {
+    Html(crate::ui::render_waiting_room_page(&slug))
+}
+
+pub async fn system_status(State(state): State<AppState>) -> Json<SystemStatusResponse> {
+    let mediasoup_sfu = state.mediasoup.health().await;
+    Json(SystemStatusResponse {
+        stage: "stage2".into(),
+        mediasoup_enabled: state.mediasoup.enabled(),
+        mediasoup_api_url: state.mediasoup.api_url().to_string(),
+        auth: true,
+        meetings: true,
+        chat_ws: true,
+        signaling_ws: true,
+        messenger_threads: true,
+        webinar_mode: true,
+        recording_placeholder: true,
+        mediasoup_sfu,
+    })
 }
 
 pub async fn health(headers: HeaderMap) -> Json<ApiMessage> {
@@ -87,19 +135,19 @@ pub async fn create_meeting(
     headers: HeaderMap,
     Json(req): Json<CreateMeetingRequest>,
 ) -> Result<Json<CreateMeetingResponse>, AppError> {
-    let auth = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .ok_or(AppError::InvalidCredentials)?;
-    let organizer_id = state.parse_token(auth)?;
+    let organizer_id = bearer_user(&headers, &state)?;
 
     let id = Uuid::new_v4();
     let slug = format!("m-{}", &id.to_string()[..8]);
+    state.mediasoup.ensure_room(&slug).await?;
+    let mode = req.mode.unwrap_or(MeetingMode::Meeting);
     let meeting = crate::models::Meeting {
         id,
         slug: slug.clone(),
         title: req.title,
         organizer_id,
+        mode: mode.clone(),
+        speaker_ids: vec![organizer_id],
         created_at: Utc::now(),
     };
 
@@ -111,7 +159,203 @@ pub async fn create_meeting(
     Ok(Json(CreateMeetingResponse {
         meeting_id: id,
         invite_link: format!("/v1/meetings/{slug}/join"),
+        mode,
     }))
+}
+
+pub async fn set_webinar_speaker(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+    Json(req): Json<SetSpeakerRequest>,
+) -> Result<Json<MeetingSpeakersResponse>, AppError> {
+    let requester = bearer_user(&headers, &state)?;
+    let mut store = state.store.write().await;
+    if !store.users_by_id.contains_key(&req.user_id) {
+        return Err(AppError::UserNotFound);
+    }
+
+    let meeting = store
+        .meetings_by_slug
+        .get_mut(&slug)
+        .ok_or(AppError::MeetingNotFound)?;
+
+    if meeting.organizer_id != requester {
+        return Err(AppError::InvalidCredentials);
+    }
+    if meeting.mode != MeetingMode::Webinar {
+        return Err(AppError::BadRequest(
+            "speaker management is available only for webinar mode".into(),
+        ));
+    }
+    if !meeting.speaker_ids.contains(&req.user_id) {
+        meeting.speaker_ids.push(req.user_id);
+    }
+
+    Ok(Json(MeetingSpeakersResponse {
+        room_slug: slug,
+        mode: meeting.mode.clone(),
+        speaker_ids: meeting.speaker_ids.clone(),
+    }))
+}
+
+pub async fn start_recording(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(slug): Path<String>,
+) -> Result<(StatusCode, Json<StartRecordingResponse>), AppError> {
+    let started_by = bearer_user(&headers, &state)?;
+    let mut store = state.store.write().await;
+
+    let meeting = store
+        .meetings_by_slug
+        .get(&slug)
+        .ok_or(AppError::MeetingNotFound)?;
+    if meeting.organizer_id != started_by {
+        return Err(AppError::InvalidCredentials);
+    }
+
+    let recording = RecordingSession {
+        id: Uuid::new_v4(),
+        room_slug: slug.clone(),
+        started_by,
+        status: "recording".into(),
+        storage_uri: format!("s3://rust-vcs-recordings/{slug}/{}.mp4", Uuid::new_v4()),
+        started_at: Utc::now(),
+    };
+
+    store.recordings.push(recording.clone());
+
+    Ok((
+        StatusCode::CREATED,
+        Json(StartRecordingResponse {
+            recording_id: recording.id,
+            room_slug: recording.room_slug,
+            status: recording.status,
+            storage_uri: recording.storage_uri,
+        }),
+    ))
+}
+
+pub async fn desktop_status(
+    State(state): State<AppState>,
+) -> Json<Vec<crate::models::DesktopAppStatus>> {
+    let store = state.store.read().await;
+    Json(store.desktop_statuses.clone())
+}
+
+pub async fn create_thread(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Json(req): Json<CreateThreadRequest>,
+) -> Result<(StatusCode, Json<CreateThreadResponse>), AppError> {
+    let created_by = bearer_user(&headers, &state)?;
+    if req.title.trim().is_empty() {
+        return Err(AppError::BadRequest("thread title is required".into()));
+    }
+
+    let mut participants = req.participant_ids;
+    if !participants.contains(&created_by) {
+        participants.push(created_by);
+    }
+
+    let mut store = state.store.write().await;
+    if participants
+        .iter()
+        .any(|id| !store.users_by_id.contains_key(id))
+    {
+        return Err(AppError::UserNotFound);
+    }
+
+    let thread_id = Uuid::new_v4();
+    store.threads_by_id.insert(
+        thread_id,
+        ChatThread {
+            id: thread_id,
+            title: req.title,
+            is_channel: req.is_channel,
+            participant_ids: participants,
+            created_by,
+            created_at: Utc::now(),
+        },
+    );
+
+    Ok((
+        StatusCode::CREATED,
+        Json(CreateThreadResponse { thread_id }),
+    ))
+}
+
+pub async fn list_threads(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> Result<Json<Vec<ChatThread>>, AppError> {
+    let user_id = bearer_user(&headers, &state)?;
+    let store = state.store.read().await;
+    let threads = store
+        .threads_by_id
+        .values()
+        .filter(|thread| thread.participant_ids.contains(&user_id) || thread.is_channel)
+        .cloned()
+        .collect();
+    Ok(Json(threads))
+}
+
+pub async fn send_thread_message(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(thread_id): Path<Uuid>,
+    Json(req): Json<SendThreadMessageRequest>,
+) -> Result<(StatusCode, Json<ApiMessage>), AppError> {
+    let sender_id = bearer_user(&headers, &state)?;
+    let mut store = state.store.write().await;
+    let thread = store
+        .threads_by_id
+        .get(&thread_id)
+        .ok_or(AppError::BadRequest("thread not found".into()))?;
+
+    if !thread.is_channel && !thread.participant_ids.contains(&sender_id) {
+        return Err(AppError::InvalidCredentials);
+    }
+
+    store.thread_messages.push(ThreadMessage {
+        id: Uuid::new_v4(),
+        thread_id,
+        sender_id,
+        text: req.text,
+        sent_at: Utc::now(),
+    });
+
+    Ok((
+        StatusCode::CREATED,
+        Json(ApiMessage {
+            message: "thread message sent".into(),
+        }),
+    ))
+}
+
+pub async fn list_thread_messages(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(thread_id): Path<Uuid>,
+) -> Result<Json<Vec<ThreadMessage>>, AppError> {
+    let user_id = bearer_user(&headers, &state)?;
+    let store = state.store.read().await;
+    let thread = store
+        .threads_by_id
+        .get(&thread_id)
+        .ok_or(AppError::BadRequest("thread not found".into()))?;
+    if !thread.is_channel && !thread.participant_ids.contains(&user_id) {
+        return Err(AppError::InvalidCredentials);
+    }
+
+    let messages = store
+        .thread_messages
+        .iter()
+        .filter(|message| message.thread_id == thread_id)
+        .cloned()
+        .collect();
+    Ok(Json(messages))
 }
 
 pub async fn join_by_link(
@@ -277,11 +521,7 @@ pub async fn send_dm(
     headers: HeaderMap,
     Json(req): Json<SendDirectMessageRequest>,
 ) -> Result<(StatusCode, Json<ApiMessage>), AppError> {
-    let auth = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        .ok_or(AppError::InvalidCredentials)?;
-    let from_user_id = state.parse_token(auth)?;
+    let from_user_id = bearer_user(&headers, &state)?;
 
     let mut store = state.store.write().await;
     if !store.users_by_id.contains_key(&req.to_user_id) {
