@@ -1,8 +1,9 @@
 use leptos::{component, view, IntoView};
 
-fn base_html(title: &str, content: impl IntoView + 'static) -> String {
+fn render_shell(title: &str, body: impl FnOnce() -> leptos::View + 'static) -> String {
     let page_title = title.to_string();
     leptos::ssr::render_to_string(move || {
+        let content = body();
         view! {
             <!DOCTYPE html>
             <html lang="ru">
@@ -63,12 +64,11 @@ fn LandingPage() -> impl IntoView {
 }
 
 pub fn render_landing_page() -> String {
-    base_html("rust-vcs Stage 2", view! { <LandingPage/> })
+    render_shell("rust-vcs Stage 2", || view! { <LandingPage/> }.into_view())
 }
 
 pub fn render_login_page() -> String {
-    base_html(
-        "Вход в rust-vcs",
+    render_shell("Вход в rust-vcs", || {
         view! {
             <h1 class="text-3xl font-bold mb-6">"Авторизация"</h1>
             <form class="space-y-4 max-w-md rounded-xl bg-slate-900 p-6 border border-slate-800">
@@ -76,13 +76,13 @@ pub fn render_login_page() -> String {
                 <input class="w-full rounded bg-slate-800 p-3" type="password" placeholder="Пароль" />
                 <button class="w-full rounded bg-indigo-600 py-3 font-semibold">"Войти"</button>
             </form>
-        },
-    )
+        }
+        .into_view()
+    })
 }
 
 pub fn render_register_page() -> String {
-    base_html(
-        "Регистрация в rust-vcs",
+    render_shell("Регистрация в rust-vcs", || {
         view! {
             <h1 class="text-3xl font-bold mb-6">"Регистрация"</h1>
             <form class="space-y-4 max-w-md rounded-xl bg-slate-900 p-6 border border-slate-800">
@@ -91,13 +91,13 @@ pub fn render_register_page() -> String {
                 <input class="w-full rounded bg-slate-800 p-3" type="password" placeholder="Пароль" />
                 <button class="w-full rounded bg-emerald-600 py-3 font-semibold">"Создать аккаунт"</button>
             </form>
-        },
-    )
+        }
+        .into_view()
+    })
 }
 
 pub fn render_messenger_page() -> String {
-    base_html(
-        "Мессенджер rust-vcs",
+    render_shell("Мессенджер rust-vcs", || {
         view! {
             <h1 class="text-3xl font-bold mb-6">"Корпоративный мессенджер"</h1>
             <section class="grid md:grid-cols-[280px_1fr] gap-6">
@@ -117,30 +117,33 @@ pub fn render_messenger_page() -> String {
                     </div>
                 </article>
             </section>
-        },
-    )
+        }
+        .into_view()
+    })
 }
 
 pub fn render_meeting_page(slug: &str) -> String {
-    base_html(
-        "Встреча rust-vcs",
+    let slug = slug.to_string();
+    render_shell("Встреча rust-vcs", move || {
         view! {
             <h1 class="text-3xl font-bold">{format!("Встреча {slug}")}</h1>
             <p class="text-slate-300 mt-2">"Комната активна. Здесь будут видео-плитки, чат и управление записью."</p>
             <div class="mt-6 rounded-xl border border-slate-800 bg-slate-900 p-5">
                 <code class="text-emerald-300">{format!("GET /v1/meetings/{slug}/signal/ws")}</code>
             </div>
-        },
-    )
+        }
+        .into_view()
+    })
 }
 
 pub fn render_waiting_room_page(slug: &str) -> String {
-    base_html(
-        "Комната ожидания",
+    let slug = slug.to_string();
+    render_shell("Комната ожидания", move || {
         view! {
             <h1 class="text-3xl font-bold">"Комната ожидания"</h1>
             <p class="text-slate-300 mt-2">{format!("Вы ожидаете подтверждения входа во встречу {slug}")}</p>
             <button class="mt-6 rounded bg-indigo-600 px-6 py-3 font-semibold">"Запросить вход"</button>
-        },
-    )
+        }
+        .into_view()
+    })
 }
