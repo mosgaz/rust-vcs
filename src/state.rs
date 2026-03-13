@@ -1,4 +1,5 @@
 use crate::errors::AppError;
+use crate::mediasoup::MediaSoupClient;
 use crate::models::{
     ChatMessage, ChatThread, DesktopAppStatus, DirectMessage, Meeting, RecordingSession,
     SignalEvent, ThreadMessage, User,
@@ -16,6 +17,7 @@ use uuid::Uuid;
 #[derive(Debug, Clone)]
 pub struct AppState {
     pub store: Arc<RwLock<Store>>,
+    pub mediasoup: MediaSoupClient,
     jwt_secret: Arc<String>,
 }
 
@@ -74,6 +76,7 @@ impl AppState {
                     },
                 ],
             })),
+            mediasoup: MediaSoupClient::from_env(),
             jwt_secret: Arc::new(jwt_secret.to_string()),
         }
     }

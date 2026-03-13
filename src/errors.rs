@@ -14,6 +14,8 @@ pub enum AppError {
     BadRequest(String),
     #[error("internal error")]
     Internal,
+    #[error("mediasoup unavailable: {0}")]
+    MediaSoupUnavailable(String),
 }
 
 #[derive(Serialize)]
@@ -27,6 +29,7 @@ impl IntoResponse for AppError {
             AppError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             AppError::UserNotFound | AppError::MeetingNotFound => StatusCode::NOT_FOUND,
             AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            AppError::MediaSoupUnavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
             AppError::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         };
         let body = Json(ErrorBody {

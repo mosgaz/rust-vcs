@@ -52,9 +52,12 @@ pub async fn ui_waiting_room(Path(slug): Path<String>) -> Html<String> {
     Html(crate::ui::render_waiting_room_page(&slug))
 }
 
-pub async fn system_status() -> Json<SystemStatusResponse> {
+pub async fn system_status(State(state): State<AppState>) -> Json<SystemStatusResponse> {
+    let mediasoup_sfu = state.mediasoup.health().await;
     Json(SystemStatusResponse {
         stage: "stage2".into(),
+        mediasoup_enabled: state.mediasoup.enabled(),
+        mediasoup_api_url: state.mediasoup.api_url().to_string(),
         auth: true,
         meetings: true,
         chat_ws: true,
@@ -62,7 +65,7 @@ pub async fn system_status() -> Json<SystemStatusResponse> {
         messenger_threads: true,
         webinar_mode: true,
         recording_placeholder: true,
-        mediasoup_sfu: false,
+        mediasoup_sfu,
     })
 }
 
@@ -136,6 +139,7 @@ pub async fn create_meeting(
 
     let id = Uuid::new_v4();
     let slug = format!("m-{}", &id.to_string()[..8]);
+    state.mediasoup.ensure_room(&slug).await?;
     let mode = req.mode.unwrap_or(MeetingMode::Meeting);
     let meeting = crate::models::Meeting {
         id,

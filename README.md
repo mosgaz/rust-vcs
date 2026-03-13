@@ -71,8 +71,19 @@ PORT=18080 cargo run
 
 - `RUST_VCS_PORT`
 - `PORT`
+- `MEDIASOUP_ENABLED`
+- `MEDIASOUP_API_URL`
 
 Приоритет: сначала уже выставленные переменные окружения процесса, затем значения из `.env`.
+
+Для включения реальной интеграции с mediasoup control-plane укажите:
+
+```env
+MEDIASOUP_ENABLED=true
+MEDIASOUP_API_URL=http://127.0.0.1:4000
+```
+
+При включенном `MEDIASOUP_ENABLED=true` создание встречи (`POST /v1/meetings`) требует успешного ответа mediasoup API `POST /rooms/ensure`.
 
 ## Основные UI маршруты
 
@@ -122,4 +133,4 @@ curl -s http://localhost:3242/health
 curl -s http://localhost:3242/v1/system/status
 ```
 
-`/v1/system/status` явно показывает, что **mediasoup SFU пока не подключен** (`mediasoup_sfu=false`), а запись встреч сейчас является placeholder-реализацией.
+`/v1/system/status` показывает текущий статус интеграции (`mediasoup_enabled`, `mediasoup_api_url`, `mediasoup_sfu`). Если mediasoup недоступен при `MEDIASOUP_ENABLED=true`, создание встречи вернёт `503 Service Unavailable`.

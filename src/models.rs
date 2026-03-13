@@ -201,6 +201,8 @@ pub struct ApiMessage {
 #[derive(Debug, Serialize)]
 pub struct SystemStatusResponse {
     pub stage: String,
+    pub mediasoup_enabled: bool,
+    pub mediasoup_api_url: String,
     pub auth: bool,
     pub meetings: bool,
     pub chat_ws: bool,
