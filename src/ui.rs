@@ -1,6 +1,7 @@
 use leptos::{component, view, IntoView};
 
-fn base_html(title: &str, content: impl IntoView) -> String {
+fn base_html(title: &str, content: impl IntoView + 'static) -> String {
+    let page_title = title.to_string();
     leptos::ssr::render_to_string(move || {
         view! {
             <!DOCTYPE html>
@@ -8,7 +9,7 @@ fn base_html(title: &str, content: impl IntoView) -> String {
                 <head>
                     <meta charset="utf-8" />
                     <meta name="viewport" content="width=device-width, initial-scale=1" />
-                    <title>{title.to_string()}</title>
+                    <title>{page_title.clone()}</title>
                     <script src="https://cdn.tailwindcss.com"></script>
                 </head>
                 <body class="bg-slate-950 text-slate-100 min-h-screen">

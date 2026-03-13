@@ -153,6 +153,10 @@ pub async fn set_webinar_speaker(
 ) -> Result<Json<MeetingSpeakersResponse>, AppError> {
     let requester = bearer_user(&headers, &state)?;
     let mut store = state.store.write().await;
+    if !store.users_by_id.contains_key(&req.user_id) {
+        return Err(AppError::UserNotFound);
+    }
+
     let meeting = store
         .meetings_by_slug
         .get_mut(&slug)
@@ -165,9 +169,6 @@ pub async fn set_webinar_speaker(
         return Err(AppError::BadRequest(
             "speaker management is available only for webinar mode".into(),
         ));
-    }
-    if !store.users_by_id.contains_key(&req.user_id) {
-        return Err(AppError::UserNotFound);
     }
     if !meeting.speaker_ids.contains(&req.user_id) {
         meeting.speaker_ids.push(req.user_id);
